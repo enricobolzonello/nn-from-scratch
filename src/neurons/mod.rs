@@ -1,6 +1,8 @@
 pub mod perceptron;
+pub mod sigmoid;
 
 pub use perceptron::Perceptron;
+pub use sigmoid::Sigmoid;
 
 use crate::tensor::Tensor;
 
