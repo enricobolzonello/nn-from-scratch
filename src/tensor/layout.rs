@@ -79,15 +79,10 @@ impl Layout {
         Some(self.offset + index)
     }
 
-    pub fn transpose(&self) -> Self {
+    pub fn transpose(&mut self) {
         let dims: Vec<usize> = self.shape.dims().iter().rev().copied().collect();
-        let strides: Vec<usize> = self.strides.iter().rev().copied().collect();
-
-        Self {
-            shape: Shape::new(dims),
-            strides,
-            offset: self.offset,
-        }
+        self.strides.reverse();
+        self.shape = Shape::new(dims);
     }
 
     pub fn transpose_axes(&self, axes: &[usize]) -> Option<Self> {
@@ -156,20 +151,20 @@ mod tests {
 
     #[test]
     fn test_transpose_2d() {
-        let layout = Layout::new(Shape::from([2, 3]));
-        let transposed = layout.transpose();
+        let mut layout = Layout::new(Shape::from([2, 3]));
+        layout.transpose();
 
-        assert_eq!(transposed.shape().dims(), &[3, 2]);
-        assert_eq!(transposed.strides(), &[1, 3]);
+        assert_eq!(layout.shape().dims(), &[3, 2]);
+        assert_eq!(layout.strides(), &[1, 3]);
     }
 
     #[test]
     fn test_transpose_3d() {
-        let layout = Layout::new(Shape::from([2, 3, 4]));
-        let transposed = layout.transpose();
+        let mut layout = Layout::new(Shape::from([2, 3, 4]));
+        layout.transpose();
 
-        assert_eq!(transposed.shape().dims(), &[4, 3, 2]);
-        assert_eq!(transposed.strides(), &[1, 4, 12]);
+        assert_eq!(layout.shape().dims(), &[4, 3, 2]);
+        assert_eq!(layout.strides(), &[1, 4, 12]);
     }
 
     #[test]
