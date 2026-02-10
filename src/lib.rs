@@ -1,13 +1,16 @@
 pub mod layers;
 pub mod neurons;
+pub mod onnx;
 pub mod tensor;
 mod utils;
 
-use std::borrow::Cow;
+use std::{borrow::Cow, fs};
 
 use layers::Layer;
 use tensor::Tensor;
 use utils::errors::{Error, Result};
+
+use crate::onnx::loader::load_model;
 
 pub struct Network {
     layers: Vec<Box<dyn Layer>>,
@@ -16,6 +19,22 @@ pub struct Network {
 impl Network {
     pub fn builder() -> NetworkBuilder {
         NetworkBuilder::new()
+    }
+
+    pub fn from_onnx(filepath: &str) -> Result<Self> {
+        if filepath.is_empty() || !fs::exists(filepath)? {
+            return Err(Error::FileDoesNotExist {
+                filepath: filepath.into(),
+            });
+        }
+
+        let layers = load_model(filepath)?;
+
+        Ok(Self { layers })
+    }
+
+    pub fn layer_count(&self) -> usize {
+        self.layers.len()
     }
 
     pub fn forward(&self, input: &Tensor) -> Result<Tensor> {

@@ -144,6 +144,7 @@ impl Tensor {
         Ok(())
     }
 
+    // TODO: optimize with SIMD
     pub fn dot(&self, other: &Tensor) -> Result<f32> {
         if self.ndim() != 1 {
             return Err(Error::ShapeMismatch {
@@ -177,54 +178,80 @@ impl Tensor {
         Ok(result)
     }
 
-    /// Matrix-vector multiplication along last axis
-    /// [..., n] @ [n] -> [...]
-    pub fn matvec(&self, vec: &Tensor) -> Result<Tensor> {
-        if vec.ndim() != 1 {
+    /// Matrix multiplication with 1D promotion:
+    /// - [M, K] @ [K, N] -> [M, N]
+    /// - [M, K] @ [K]    -> [M]     (second operand promoted to [K, 1], result squeezed)
+    /// - [K]    @ [K, N]  -> [N]     (first operand promoted to [1, K], result squeezed)
+    /// TODO: optimize with SIMD
+    pub fn matmul(&self, other: &Tensor) -> Result<Tensor> {
+        let squeeze_first = self.ndim() == 1;
+        let squeeze_last = other.ndim() == 1;
+
+        let a_shape = if squeeze_first {
+            vec![1, self.shape()[0]]
+        } else if self.ndim() == 2 {
+            self.shape().to_vec()
+        } else {
             return Err(Error::ShapeMismatch {
-                expected: 1,
-                actual: vec.ndim(),
+                expected: 2,
+                actual: self.ndim(),
+            });
+        };
+
+        let b_shape = if squeeze_last {
+            vec![other.shape()[0], 1]
+        } else if other.ndim() == 2 {
+            other.shape().to_vec()
+        } else {
+            return Err(Error::ShapeMismatch {
+                expected: 2,
+                actual: other.ndim(),
+            });
+        };
+
+        let m = a_shape[0];
+        let k = a_shape[1];
+        let k2 = b_shape[0];
+        let n = b_shape[1];
+
+        if k != k2 {
+            return Err(Error::ShapeMismatch {
+                expected: k,
+                actual: k2,
             });
         }
 
-        let n = *self
-            .shape()
-            .last()
-            .ok_or_else(|| Error::empty_vec("Empty tensor shape"))?;
+        let mut result_data = vec![0.0; m * n];
 
-        if vec.size() != n {
-            return Err(Error::ShapeMismatch {
-                expected: n,
-                actual: vec.size(),
-            });
-        }
-
-        let result_shape: Vec<usize> = self.shape()[..self.ndim() - 1].to_vec();
-        let result_size: usize = result_shape.iter().product();
-
-        if result_size == 0 {
-            return Tensor::new(result_shape, Vec::<f32>::new());
-        }
-
-        let mut result_data = vec![0.0; result_size];
-
-        for (idx, result_val) in result_data.iter_mut().enumerate() {
-            let mut indices = vec![0; self.ndim()];
-            let mut remaining = idx;
-            for (i, &dim) in result_shape.iter().enumerate().rev() {
-                indices[i] = remaining % dim;
-                remaining /= dim;
-            }
-
-            let mut sum = 0.0;
+        for i in 0..m {
             for j in 0..n {
-                indices[self.ndim() - 1] = j;
-                sum += self.get(&indices)? * vec.get(&[j])?;
+                let mut sum = 0.0;
+                for p in 0..k {
+                    let a_val = if squeeze_first {
+                        self.get(&[p])?
+                    } else {
+                        self.get(&[i, p])?
+                    };
+                    let b_val = if squeeze_last {
+                        other.get(&[p])?
+                    } else {
+                        other.get(&[p, j])?
+                    };
+                    sum += a_val * b_val;
+                }
+                result_data[i * n + j] = sum;
             }
-            *result_val = sum;
         }
 
-        Tensor::new(result_shape, result_data)
+        if squeeze_first && squeeze_last {
+            Tensor::new([1], vec![result_data[0]])
+        } else if squeeze_first {
+            Tensor::new(vec![n], result_data)
+        } else if squeeze_last {
+            Tensor::new(vec![m], result_data)
+        } else {
+            Tensor::new([m, n], result_data)
+        }
     }
 }
 
@@ -317,12 +344,12 @@ mod tests {
     }
 
     #[test]
-    fn test_matvec_2d() {
-        // [2, 3] @ [3] -> [2]
+    fn test_matmul_mat_vec() {
+        // [2, 3] @ [3] -> [2] (second operand promoted to [3,1], result squeezed)
         let mat = Tensor::new([2, 3], [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).unwrap();
         let vec = Tensor::new([3], [1.0, 2.0, 3.0]).unwrap();
 
-        let result = mat.matvec(&vec).unwrap();
+        let result = mat.matmul(&vec).unwrap();
 
         assert_eq!(result.shape(), &[2]);
         // row 0: 1*1 + 2*2 + 3*3 = 14
@@ -332,34 +359,49 @@ mod tests {
     }
 
     #[test]
-    fn test_matvec_3d() {
-        // [2, 2, 3] @ [3] -> [2, 2]
-        let tensor = Tensor::new(
-            [2, 2, 3],
-            [
-                1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0, 11.0, 12.0,
-            ],
-        )
-        .unwrap();
-        let vec = Tensor::new([3], [1.0, 1.0, 1.0]).unwrap();
+    fn test_matmul_vec_mat() {
+        // [3] @ [3, 2] -> [2] (first operand promoted to [1,3], result squeezed)
+        let vec = Tensor::new([3], [1.0, 2.0, 3.0]).unwrap();
+        let mat = Tensor::new([3, 2], [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).unwrap();
 
-        let result = tensor.matvec(&vec).unwrap();
+        let result = vec.matmul(&mat).unwrap();
 
-        assert_eq!(result.shape(), &[2, 2]);
-        // [0,0]: 1+2+3 = 6
-        // [0,1]: 4+5+6 = 15
-        // [1,0]: 7+8+9 = 24
-        // [1,1]: 10+11+12 = 33
-        assert!((result.get(&[0, 0]).unwrap() - 6.0).abs() < 1e-6);
-        assert!((result.get(&[0, 1]).unwrap() - 15.0).abs() < 1e-6);
-        assert!((result.get(&[1, 0]).unwrap() - 24.0).abs() < 1e-6);
-        assert!((result.get(&[1, 1]).unwrap() - 33.0).abs() < 1e-6);
+        assert_eq!(result.shape(), &[2]);
+        // 1*1+2*3+3*5 = 22
+        // 1*2+2*4+3*6 = 28
+        assert!((result.get(&[0]).unwrap() - 22.0).abs() < 1e-6);
+        assert!((result.get(&[1]).unwrap() - 28.0).abs() < 1e-6);
     }
 
     #[test]
-    fn test_matvec_shape_mismatch() {
+    fn test_matmul() {
+        // [2, 3] @ [3, 2] -> [2, 2]
+        let a = Tensor::new([2, 3], [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).unwrap();
+        let b = Tensor::new([3, 2], [7.0, 8.0, 9.0, 10.0, 11.0, 12.0]).unwrap();
+        let result = a.matmul(&b).unwrap();
+
+        assert_eq!(result.shape(), &[2, 2]);
+        // [0,0]: 1*7+2*9+3*11 = 58
+        // [0,1]: 1*8+2*10+3*12 = 64
+        // [1,0]: 4*7+5*9+6*11 = 139
+        // [1,1]: 4*8+5*10+6*12 = 154
+        assert!((result.get(&[0, 0]).unwrap() - 58.0).abs() < 1e-6);
+        assert!((result.get(&[0, 1]).unwrap() - 64.0).abs() < 1e-6);
+        assert!((result.get(&[1, 0]).unwrap() - 139.0).abs() < 1e-6);
+        assert!((result.get(&[1, 1]).unwrap() - 154.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn test_matmul_shape_mismatch() {
+        let a = Tensor::new([2, 3], [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).unwrap();
+        let b = Tensor::new([2, 2], [1.0, 2.0, 3.0, 4.0]).unwrap();
+        assert!(matches!(a.matmul(&b), Err(Error::ShapeMismatch { .. })));
+    }
+
+    #[test]
+    fn test_matmul_vec_shape_mismatch() {
         let mat = Tensor::new([2, 3], [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).unwrap();
         let vec = Tensor::new([2], [1.0, 2.0]).unwrap();
-        assert!(matches!(mat.matvec(&vec), Err(Error::ShapeMismatch { .. })));
+        assert!(matches!(mat.matmul(&vec), Err(Error::ShapeMismatch { .. })));
     }
 }
