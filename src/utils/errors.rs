@@ -4,8 +4,8 @@ pub type Result<T> = core::result::Result<T, Error>;
 
 #[derive(Debug, Display, From)]
 pub enum Error {
-    #[display("Shape mismatch: expected {expected}, got {actual}")]
-    ShapeMismatch { expected: usize, actual: usize },
+    #[display("Shape error: {_0}")]
+    ShapeError(String),
 
     #[display("Index out of bounds: {indices:?} for shape {shape:?}")]
     IndexOutOfBounds {

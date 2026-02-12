@@ -1,5 +1,7 @@
 use super::shape::Shape;
 
+use crate::utils::errors::Result;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Layout {
     shape: Shape,
@@ -77,6 +79,18 @@ impl Layout {
             .sum::<usize>();
 
         Some(self.offset + index)
+    }
+
+    pub fn flatten(&self, start_dim: usize, end_dim: usize) -> Result<Self> {
+        let dims = self.shape.dims();
+        let flat_size: usize = dims[start_dim..=end_dim].iter().product();
+
+        let mut new_dims = Vec::with_capacity(dims.len() - (end_dim - start_dim));
+        new_dims.extend_from_slice(&dims[..start_dim]);
+        new_dims.push(flat_size);
+        new_dims.extend_from_slice(&dims[end_dim + 1..]);
+
+        Ok(Self::new(Shape::new(new_dims)))
     }
 
     pub fn transpose(&mut self) {

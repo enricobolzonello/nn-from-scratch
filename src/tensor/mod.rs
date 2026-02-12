@@ -25,10 +25,11 @@ impl Tensor {
         let expected_size = shape.size();
 
         if data.len() != expected_size {
-            return Err(Error::ShapeMismatch {
-                expected: expected_size,
-                actual: data.len(),
-            });
+            return Err(Error::ShapeError(format!(
+                "data length {} does not match shape size {}",
+                data.len(),
+                expected_size
+            )));
         }
 
         let layout = Layout::new(shape);
@@ -123,6 +124,13 @@ impl Tensor {
         Arc::make_mut(&mut self.data).as_mut_slice()
     }
 
+    pub fn flatten(&self, start_dim: usize, end_dim: usize) -> Result<Tensor> {
+        Ok(Tensor {
+            layout: self.layout().flatten(start_dim, end_dim)?,
+            data: self.data.clone(),
+        })
+    }
+
     pub fn layout(&self) -> &Layout {
         &self.layout
     }
@@ -147,24 +155,25 @@ impl Tensor {
     // TODO: optimize with SIMD
     pub fn dot(&self, other: &Tensor) -> Result<f32> {
         if self.ndim() != 1 {
-            return Err(Error::ShapeMismatch {
-                expected: 1,
-                actual: self.ndim(),
-            });
+            return Err(Error::ShapeError(format!(
+                "dot requires 1D tensors, got {}D",
+                self.ndim()
+            )));
         }
 
         if other.ndim() != 1 {
-            return Err(Error::ShapeMismatch {
-                expected: 1,
-                actual: other.ndim(),
-            });
+            return Err(Error::ShapeError(format!(
+                "dot requires 1D tensors, got {}D",
+                other.ndim()
+            )));
         }
 
         if self.size() != other.size() {
-            return Err(Error::ShapeMismatch {
-                expected: self.size(),
-                actual: other.size(),
-            });
+            return Err(Error::ShapeError(format!(
+                "dot requires same length, got {} and {}",
+                self.size(),
+                other.size()
+            )));
         }
 
         let result = (0..self.size())
@@ -192,10 +201,10 @@ impl Tensor {
         } else if self.ndim() == 2 {
             self.shape().to_vec()
         } else {
-            return Err(Error::ShapeMismatch {
-                expected: 2,
-                actual: self.ndim(),
-            });
+            return Err(Error::ShapeError(format!(
+                "matmul requires 1D or 2D tensors, got {}D",
+                self.ndim()
+            )));
         };
 
         let b_shape = if squeeze_last {
@@ -203,10 +212,10 @@ impl Tensor {
         } else if other.ndim() == 2 {
             other.shape().to_vec()
         } else {
-            return Err(Error::ShapeMismatch {
-                expected: 2,
-                actual: other.ndim(),
-            });
+            return Err(Error::ShapeError(format!(
+                "matmul requires 1D or 2D tensors, got {}D",
+                other.ndim()
+            )));
         };
 
         let m = a_shape[0];
@@ -215,10 +224,10 @@ impl Tensor {
         let n = b_shape[1];
 
         if k != k2 {
-            return Err(Error::ShapeMismatch {
-                expected: k,
-                actual: k2,
-            });
+            return Err(Error::ShapeError(format!(
+                "matmul inner dimensions mismatch: {} vs {}",
+                k, k2
+            )));
         }
 
         let mut result_data = vec![0.0; m * n];
@@ -311,7 +320,7 @@ mod tests {
     #[test]
     fn test_shape_mismatch_error() {
         let result = Tensor::new([2, 2], [1.0, 2.0, 3.0]);
-        assert!(matches!(result, Err(Error::ShapeMismatch { .. })));
+        assert!(matches!(result, Err(Error::ShapeError(_))));
     }
 
     #[test]
@@ -333,14 +342,14 @@ mod tests {
     fn test_dot_product_length_mismatch() {
         let a = Tensor::new([2], [1.0, 2.0]).unwrap();
         let b = Tensor::new([3], [1.0, 2.0, 3.0]).unwrap();
-        assert!(matches!(a.dot(&b), Err(Error::ShapeMismatch { .. })));
+        assert!(matches!(a.dot(&b), Err(Error::ShapeError(_))));
     }
 
     #[test]
     fn test_dot_product_not_1d() {
         let a = Tensor::new([2, 2], [1.0, 2.0, 3.0, 4.0]).unwrap();
         let b = Tensor::new([4], [1.0, 2.0, 3.0, 4.0]).unwrap();
-        assert!(matches!(a.dot(&b), Err(Error::ShapeMismatch { .. })));
+        assert!(matches!(a.dot(&b), Err(Error::ShapeError(_))));
     }
 
     #[test]
@@ -395,13 +404,13 @@ mod tests {
     fn test_matmul_shape_mismatch() {
         let a = Tensor::new([2, 3], [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).unwrap();
         let b = Tensor::new([2, 2], [1.0, 2.0, 3.0, 4.0]).unwrap();
-        assert!(matches!(a.matmul(&b), Err(Error::ShapeMismatch { .. })));
+        assert!(matches!(a.matmul(&b), Err(Error::ShapeError(_))));
     }
 
     #[test]
     fn test_matmul_vec_shape_mismatch() {
         let mat = Tensor::new([2, 3], [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]).unwrap();
         let vec = Tensor::new([2], [1.0, 2.0]).unwrap();
-        assert!(matches!(mat.matmul(&vec), Err(Error::ShapeMismatch { .. })));
+        assert!(matches!(mat.matmul(&vec), Err(Error::ShapeError(_))));
     }
 }

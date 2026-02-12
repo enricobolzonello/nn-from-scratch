@@ -1,5 +1,6 @@
 use crate::{tensor::Tensor, utils::errors::Result};
 
+pub mod flatten;
 pub(crate) mod gemm;
 pub mod linear;
 
