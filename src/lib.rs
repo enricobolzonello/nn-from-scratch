@@ -1,7 +1,6 @@
 #![feature(portable_simd)]
 
 pub mod layers;
-pub mod neurons;
 pub mod onnx;
 pub mod tensor;
 mod utils;
