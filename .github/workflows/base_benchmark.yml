@@ -27,7 +27,7 @@ jobs:
       - name: Track latency benchmarks with Bencher
         run: |
           bencher run \
-          --project neural-network \
+          --project neural-network-72f5cfd-y5h6xkvsogil1 \
           --token '${{ secrets.BENCHER_API_TOKEN }}' \
           --branch main \
           --testbed ubuntu-latest \
@@ -42,7 +42,7 @@ jobs:
       - name: Track accuracy with Bencher
         run: |
           bencher run \
-          --project neural-network \
+          --project neural-network-72f5cfd-y5h6xkvsogil1 \
           --token '${{ secrets.BENCHER_API_TOKEN }}' \
           --branch main \
           --testbed ubuntu-latest \
