@@ -20,8 +20,8 @@ jobs:
       checks: write
     runs-on: ubuntu-latest
     steps:
-      - uses: actions-rust-lang/setup-rust-toolchain@fb51252c7ba57d633bc668f941da052e410add48 # v1
-      - uses: bencherdev/bencher@f89d454e74a32a81b2eab29fe0afdb2316617342 # v0.5
+      - uses: actions/checkout@v6
+      - uses: bencherdev/bencher@main
       - name: Track latency benchmarks with Bencher
         run: |
           bencher run \
@@ -31,7 +31,7 @@ jobs:
           --testbed ubuntu-latest \
           --threshold-measure latency \
           --threshold-test t_test \
-          --threshold-lower-boundary 0.99 \
+          --threshold-upper-boundary 0.99 \
           --thresholds-reset \
           --err \
           --adapter rust_criterion \
