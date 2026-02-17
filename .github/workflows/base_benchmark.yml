@@ -22,6 +22,7 @@ jobs:
     steps:
       - uses: arduino/setup-protoc@v3
       - uses: actions/checkout@v6
+      - run: rustup override set nightly
       - uses: bencherdev/bencher@main
       - name: Track latency benchmarks with Bencher
         run: |
