@@ -9,8 +9,8 @@ pub use utils::data::{Dataset, Sample};
 
 use std::{borrow::Cow, fs};
 
-use layers::Layer;
-use tensor::Tensor;
+pub use layers::Layer;
+pub use tensor::Tensor;
 use utils::errors::{Error, Result};
 
 use crate::onnx::loader::load_model;

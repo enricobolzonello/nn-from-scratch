@@ -1,17 +1,17 @@
-use std::{env, fs::File};
+use std::fs::File;
 
 use arrow_array::{cast::AsArray, types::Int64Type};
-use indicatif::{ProgressBar, ProgressStyle};
-use neural_network::{Dataset, Network, Sample, Tensor};
+use neural_network::Tensor;
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 
-struct MnistDataset {
-    inputs: Vec<Tensor>,
-    labels: Vec<u64>,
+pub struct MnistDataset {
+    pub inputs: Vec<Tensor>,
+    #[allow(dead_code)]
+    pub labels: Vec<u64>,
 }
 
 impl MnistDataset {
-    fn from_parquet(path: &str) -> Self {
+    pub fn from_parquet(path: &str) -> Self {
         let file = File::open(path).expect("could not open parquet file");
         let builder =
             ParquetRecordBatchReaderBuilder::try_new(file).expect("failed to read parquet file");
@@ -57,64 +57,4 @@ impl MnistDataset {
 
         Self { inputs, labels }
     }
-}
-
-impl Dataset<u64> for MnistDataset {
-    fn len(&self) -> usize {
-        self.inputs.len()
-    }
-
-    fn get(&self, index: usize) -> Sample<u64> {
-        Sample {
-            input: self.inputs[index].clone(),
-            label: self.labels[index],
-        }
-    }
-}
-
-fn main() {
-    let args: Vec<String> = env::args().collect();
-    if args.len() != 3 {
-        eprintln!("usage: neural-network <test.parquet> <model.onnx>");
-        std::process::exit(1);
-    }
-
-    let network = Network::from_onnx(&args[2]).expect("failed to load model");
-    println!("Loaded model with {} layers", network.layer_count());
-
-    let dataset = MnistDataset::from_parquet(&args[1]);
-    println!("Loaded {} test samples", dataset.len());
-
-    let mut correct = 0usize;
-    let total = dataset.len();
-
-    let pb = ProgressBar::new(total as u64);
-    pb.set_style(
-        ProgressStyle::default_bar()
-            .template("{bar:40} {pos}/{len} ({percent}%) {msg}")
-            .unwrap(),
-    );
-
-    for i in 0..total {
-        pb.inc(1);
-        let sample = dataset.get(i);
-        let output = network.forward(&sample.input).expect("forward pass failed");
-
-        let prediction = output
-            .data()
-            .iter()
-            .enumerate()
-            .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap())
-            .map(|(idx, _)| idx)
-            .unwrap();
-
-        if prediction == sample.label as usize {
-            correct += 1;
-        }
-    }
-
-    pb.finish_with_message(format!(
-        "Accuracy: {correct}/{total} ({:.2}%)",
-        correct as f64 / total as f64 * 100.0
-    ));
 }
