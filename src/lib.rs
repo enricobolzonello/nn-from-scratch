@@ -5,6 +5,8 @@ pub mod onnx;
 pub mod tensor;
 mod utils;
 
+pub use utils::data::{Dataset, Sample};
+
 use std::{borrow::Cow, fs};
 
 use layers::Layer;
